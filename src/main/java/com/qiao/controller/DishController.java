@@ -14,6 +14,9 @@ import com.qiao.service.impl.DishServiceImpl;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.CacheManager;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.web.bind.annotation.*;
 
@@ -37,7 +40,8 @@ public class DishController {
     @Autowired
     private RedisTemplate redisTemplate;
 
-
+    @Autowired
+    private CacheManager cacheManager;
 
     @GetMapping("/page")
     public R<Page> getPage(int page, int pageSize,String name){
@@ -132,14 +136,14 @@ public class DishController {
     @GetMapping("/list")
     public R<List<DishDto>> getDishList(Dish dish){
         Long categoryId = dish.getCategoryId();
-        List<DishDto> dishDtos = null;
+        List<DishDto> dishDtos = new ArrayList<>();
 
         String key = "dish_" +categoryId +"_" +dish.getStatus();
 
-        dishDtos = (List<DishDto>) redisTemplate.opsForValue().get(key);
+        List<DishDto> dishDtoList = (List<DishDto>) redisTemplate.opsForValue().get(key);
 
-        if(dishDtos != null){
-            return R.success(dishDtos);
+        if(dishDtoList != null){
+            return R.success(dishDtoList);
         }
 
         LambdaQueryWrapper<Dish> lqw = new LambdaQueryWrapper<>();
@@ -148,7 +152,6 @@ public class DishController {
 
         List<Dish> dishes = dishService.list(lqw);
 
-        List<DishDto> finalDishDtos = dishDtos;
         dishes.forEach(item -> {
             DishDto dishDto = new DishDto();
             BeanUtils.copyProperties(item,dishDto);
@@ -161,7 +164,7 @@ public class DishController {
 
             dishDto.setFlavors(dishFlavors);
 
-            finalDishDtos.add(dishDto);
+            dishDtos.add(dishDto);
         });
 
         redisTemplate.opsForValue().set(key,dishDtos,60, TimeUnit.MINUTES);
